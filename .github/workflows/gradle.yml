@@ -25,3 +25,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Build with Gradle
       run: ./gradlew build -x checkstyleMain -x checkstyleTest
+
+    - name: Upload JAR
+      uses: actions/upload-artifact@v4
+      with:
+        name: built-jar
+        path: build/libs/*.jar
