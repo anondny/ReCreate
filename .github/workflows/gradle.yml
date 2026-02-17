@@ -1,33 +1,63 @@
-name: Build
+name: Build & Release
 
 on:
   push:
+    branches:
+      - main   # change if needed
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: read
+
     steps:
     - name: Checkout sources
       uses: actions/checkout@v4
+
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
-        distribution: 'temurin'
+        distribution: temurin
         java-version: 17
+
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v5  
+      uses: gradle/actions/setup-gradle@v5
+
     - run: chmod +x gradlew
+
     - name: Replace GitHub Package credentials
       run: |
         sed -i "s|\[Your username here\]|${GITHUB_ACTOR}|g" repositories.gradle
         sed -i "s|\[Your access token here\]|${GITHUB_TOKEN}|g" repositories.gradle
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Build with Gradle
       run: ./gradlew build -x checkstyleMain -x checkstyleTest
 
-    - name: Upload JAR
-      uses: actions/upload-artifact@v4
+    - name: Get Mod Version
+      id: version
+      run: echo "VERSION=$(./gradlew -q printVersion)" >> $GITHUB_OUTPUT
+      continue-on-error: true
+
+    - name: Fallback Version Extraction
+      if: steps.version.outputs.VERSION == ''
+      id: fallback
+      run: |
+        VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
       with:
-        name: built-jar
-        path: build/libs/*.jar
+        tag_name: v${{ steps.fallback.outputs.VERSION || steps.version.outputs.VERSION }}
+        name: v${{ steps.fallback.outputs.VERSION || steps.version.outputs.VERSION }}
+        files: |
+          build/libs/*.jar
+          !build/libs/*-sources.jar
+          !build/libs/*-dev.jar
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
